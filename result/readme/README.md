@@ -26,6 +26,8 @@ script/run_benchmark.sh --data-dir /data/TEDLIUM_release-3/legacy/test
 
 전체 실험은 `faster-whisper`와 `openai-whisper`를 순서대로 실행합니다. GPU 서버에서는 기본 CUDA FP16을 사용합니다. CPU에서 실행할 때는 `--device cpu`를 지정하며, 해당 결과는 GPU FP16 조건과 직접 비교하지 않습니다.
 
+실행 중에는 엔진별·RQ별 완료 건수와 비율을 표본마다 출력합니다. 기본 전체 실행에서 RQ1은 엔진당 100건, RQ2는 엔진당 300건(50개 입력 × 2개 길이 × 3개 청크 조건)입니다. 재실행할 때는 기존 성공 건수를 먼저 표시합니다.
+
 짧은 실행 및 일부 조건 실행 예시:
 
 ```bash

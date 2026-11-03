@@ -498,46 +498,70 @@ def main() -> int:
             print(f"Loading {engine_name} {MODEL_NAME} on {args.device}")
             engine = Engine(engine_name, args.device)
             engine.warmup()
-            conditions: Iterable[tuple[Clip, int | None]] = (
-                (clip, None) if clip.rq == "rq1" else (clip, chunk)
-                for clip in clips
-                for chunk in ([None] if clip.rq == "rq1" else RQ2_CHUNK_SIZES)
-            )
-            for clip, chunk_sec in conditions:
-                rq_label = "rq1" if clip.rq == "rq1" else "rq2"
-                chunk_label = "" if chunk_sec is None else str(chunk_sec)
-                key = (config_id, engine_name, rq_label, clip.sample_id, chunk_label)
-                if key in completed:
-                    continue
-                row: dict[str, Any] = {
-                    "config_id": config_id, "engine": engine_name, "rq": rq_label,
-                    "sample_id": clip.sample_id, "talk_id": clip.talk.talk_id,
-                    "source_path": str(clip.talk.audio_path),
-                    "start_sec": f"{clip.start_sec:.3f}", "end_sec": f"{clip.end_sec:.3f}",
-                    "audio_duration_sec": f"{clip.duration_sec:.3f}", "chunk_sec": chunk_label,
-                    "gt_tokens": clip.gt_tokens,
-                    "speech_density_tokens_per_sec": f"{clip.gt_tokens / clip.duration_sec:.6f}",
-                    "completed_at_utc": datetime.now(timezone.utc).isoformat(),
-                }
-                try:
-                    engine.synchronize()
-                    start_time = time.perf_counter()
-                    audio = load_window(clip)
-                    chunks = split_audio(audio, chunk_sec)
-                    transcript = " ".join(engine.transcribe_one(part) for part in chunks).strip()
-                    engine.synchronize()
-                    latency = time.perf_counter() - start_time
-                    row.update({"e2e_latency_sec": f"{latency:.6f}", "rtf": f"{latency / clip.duration_sec:.6f}", "status": "ok", "transcript": transcript, "error": ""})
-                    print(f"{engine_name} {rq_label} {clip.sample_id} chunk={chunk_label or 'engine'} E2EL={latency:.2f}s")
-                except Exception as exc:
-                    row.update({"e2e_latency_sec": "", "rtf": "", "status": "error", "transcript": "", "error": f"{type(exc).__name__}: {exc}"})
-                    print(f"ERROR {engine_name} {rq_label} {clip.sample_id}: {exc}", file=sys.stderr)
-                append_csv(result_path, RESULT_FIELDS, row)
-                newly_recorded += 1
-                if row["status"] == "ok":
-                    completed.add(key)
-                if newly_recorded % 10 == 0:
-                    summarize_and_plot(result_path, output_dir, config_id)
+            tasks_by_rq: dict[str, list[tuple[Clip, int | None]]] = {
+                "rq1": [(clip, None) for clip in clips if clip.rq == "rq1"],
+                "rq2": [
+                    (clip, chunk)
+                    for clip in clips
+                    if clip.rq == "rq2"
+                    for chunk in RQ2_CHUNK_SIZES
+                ],
+            }
+            progress = {}
+            for rq_label, tasks in tasks_by_rq.items():
+                already_done = sum(
+                    (config_id, engine_name, rq_label, clip.sample_id,
+                     "" if chunk_sec is None else str(chunk_sec)) in completed
+                    for clip, chunk_sec in tasks
+                )
+                progress[rq_label] = already_done
+                total = len(tasks)
+                percent = 100.0 * already_done / total if total else 100.0
+                print(f"[{engine_name}][{rq_label.upper()}] {already_done}/{total} ({percent:.1f}%)")
+
+            for rq_label, tasks in tasks_by_rq.items():
+                total = len(tasks)
+                for clip, chunk_sec in tasks:
+                    chunk_label = "" if chunk_sec is None else str(chunk_sec)
+                    key = (config_id, engine_name, rq_label, clip.sample_id, chunk_label)
+                    if key in completed:
+                        continue
+                    row: dict[str, Any] = {
+                        "config_id": config_id, "engine": engine_name, "rq": rq_label,
+                        "sample_id": clip.sample_id, "talk_id": clip.talk.talk_id,
+                        "source_path": str(clip.talk.audio_path),
+                        "start_sec": f"{clip.start_sec:.3f}", "end_sec": f"{clip.end_sec:.3f}",
+                        "audio_duration_sec": f"{clip.duration_sec:.3f}", "chunk_sec": chunk_label,
+                        "gt_tokens": clip.gt_tokens,
+                        "speech_density_tokens_per_sec": f"{clip.gt_tokens / clip.duration_sec:.6f}",
+                        "completed_at_utc": datetime.now(timezone.utc).isoformat(),
+                    }
+                    try:
+                        engine.synchronize()
+                        start_time = time.perf_counter()
+                        audio = load_window(clip)
+                        chunks = split_audio(audio, chunk_sec)
+                        transcript = " ".join(engine.transcribe_one(part) for part in chunks).strip()
+                        engine.synchronize()
+                        latency = time.perf_counter() - start_time
+                        row.update({"e2e_latency_sec": f"{latency:.6f}", "rtf": f"{latency / clip.duration_sec:.6f}", "status": "ok", "transcript": transcript, "error": ""})
+                    except Exception as exc:
+                        row.update({"e2e_latency_sec": "", "rtf": "", "status": "error", "transcript": "", "error": f"{type(exc).__name__}: {exc}"})
+                        print(f"ERROR {engine_name} {rq_label.upper()} {clip.sample_id}: {exc}", file=sys.stderr)
+                    append_csv(result_path, RESULT_FIELDS, row)
+                    newly_recorded += 1
+                    progress[rq_label] += 1
+                    if row["status"] == "ok":
+                        completed.add(key)
+                    percent = 100.0 * progress[rq_label] / total if total else 100.0
+                    result_note = f"E2EL={row['e2e_latency_sec']}s" if row["status"] == "ok" else "FAILED"
+                    print(
+                        f"[{engine_name}][{rq_label.upper()}] "
+                        f"{progress[rq_label]}/{total} ({percent:.1f}%) "
+                        f"sample={clip.sample_id} chunk={chunk_label or 'engine'} {result_note}"
+                    )
+                    if newly_recorded % 10 == 0:
+                        summarize_and_plot(result_path, output_dir, config_id)
             del engine
             if args.device == "cuda":
                 import torch
