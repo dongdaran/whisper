@@ -1,0 +1,1 @@
+"""Whisper latency benchmark package."""

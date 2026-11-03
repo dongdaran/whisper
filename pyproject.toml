@@ -1,0 +1,25 @@
+[project]
+name = "whisper-latency-benchmark"
+version = "0.1.0"
+description = "Reproducible Whisper E2E latency experiments on TEDLIUM test"
+requires-python = ">=3.10,<3.13"
+dependencies = [
+  "faster-whisper>=1.1,<2",
+  "matplotlib>=3.9,<4",
+  "numpy>=1.26,<2",
+  "openai-whisper>=20240930",
+  "scipy>=1.13,<2",
+  "soundfile>=0.12,<1",
+  "torch>=2.7",
+]
+
+[tool.uv]
+package = false
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu128" }
