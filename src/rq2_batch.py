@@ -17,6 +17,7 @@ import platform
 import random
 import sys
 import time
+import traceback
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -405,7 +406,7 @@ def _run(args: argparse.Namespace) -> int:
                         "rtf": "",
                         "status": "error",
                         "transcript": "",
-                        "error": f"{type(exc).__name__}: {exc}",
+                        "error": traceback.format_exc(),
                     })
                     print(
                         f"ERROR RQ2 batch={batch_size} sample={clip.sample_id}: {exc}",
@@ -414,6 +415,15 @@ def _run(args: argparse.Namespace) -> int:
                     )
 
                 _append_csv(results_path, RESULT_FIELDS, row)
+                if row["status"] == "error" and any(
+                    marker in row["error"].lower()
+                    for marker in ("cuda", "out of memory", "parallel_for")
+                ):
+                    print("CUDA error saved; stopping to avoid subsequent invalid measurements. "
+                          "Restart with --batch-sizes 2 4 8 if batch 16 exceeds GPU memory.",
+                          file=sys.stderr, flush=True)
+                    _summarize_and_plot(results_path, output_dir, config_id)
+                    return 1
                 newly_recorded += 1
                 progress[batch_size] += 1
                 if row["status"] == "ok":
@@ -450,6 +460,7 @@ def get_args() -> argparse.Namespace:
     parser.add_argument("--output-dir", type=Path, default=ROOT / "result")
     parser.add_argument("--device", choices=("cuda", "cpu"), default="cuda")
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--batch-sizes", type=int, nargs="+", default=list(BATCH_SIZES))
     parser.add_argument(
         "--limit", type=int, default=None,
         help="Optional number of samples for a short run; default uses all 50",
@@ -457,11 +468,16 @@ def get_args() -> argparse.Namespace:
     args = parser.parse_args()
     if args.limit is not None and args.limit < 1:
         parser.error("--limit must be positive")
+    if any(size < 1 for size in args.batch_sizes) or len(set(args.batch_sizes)) != len(args.batch_sizes):
+        parser.error("--batch-sizes requires distinct positive integers")
     return args
 
 
 def main() -> int:
-    return _run(get_args())
+    global BATCH_SIZES
+    args = get_args()
+    BATCH_SIZES = tuple(args.batch_sizes)
+    return _run(args)
 
 
 if __name__ == "__main__":
