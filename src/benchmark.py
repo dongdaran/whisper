@@ -325,7 +325,10 @@ def summarize_and_plot(result_path: Path, output_dir: Path, config_id: str) -> N
         # RQ3 is computed from RQ2 measurement rows, retaining chunk-size conditions.
         selected = [row for row in rows if row["rq"] == ("rq2" if rq == "rq3" else rq)]
         if rq == "rq3":
-            selected = [row for row in selected if row.get("speech_density_tokens_per_sec")]
+            selected = [
+                row for row in selected
+                if row.get("speech_density_tokens_per_sec") and int(row.get("chunk_sec") or 0) == 30
+            ]
         if not selected:
             continue
         fig, ax = plt.subplots(figsize=(8, 5))
@@ -350,25 +353,69 @@ def summarize_and_plot(result_path: Path, output_dir: Path, config_id: str) -> N
                 ax.bar(offsets, means, width=bar_width, label=f"{engine}, {duration}s input")
             ax.set_xticks(np.arange(len(chunks)), [f"{chunk}s" for chunk in chunks])
         elif rq == "rq3":
-            groups = sorted({
-                (row["engine"], int(row["chunk_sec"]), int(round(float(row["audio_duration_sec"]))))
-                for row in selected
-            })
-            duration_markers = {60: "o", 600: "s"}
-            for engine, chunk, duration in groups:
+            # Keep the two input lengths in separate figures so speech density
+            # and latency are compared within the same input-duration condition.
+            for duration in sorted({int(round(float(row["audio_duration_sec"]))) for row in selected}):
+                duration_rows = [
+                    row for row in selected
+                    if int(round(float(row["audio_duration_sec"]))) == duration
+                ]
+                for engine, chunk in sorted({(row["engine"], int(row["chunk_sec"])) for row in duration_rows}):
+                    group_rows = [
+                        row for row in duration_rows
+                        if row["engine"] == engine and int(row["chunk_sec"]) == chunk
+                    ]
+                    ax.scatter(
+                        [float(row[x_key]) for row in group_rows],
+                        [float(row["e2e_latency_sec"]) for row in group_rows],
+                        alpha=0.65,
+                        label=f"{engine}, chunk={chunk}s",
+                    )
+                ax.set_title(f"{title} (input={duration}s)")
+                ax.set_xlabel(x_label)
+                ax.set_ylabel("E2E latency (s)")
+                if duration == 60:
+                    ax.set_xlim(0, 5)
+                    ax.set_xticks(np.arange(0, 5.01, 0.5))
+                    ax.set_ylim(0, 6)
+                    ax.set_yticks(np.arange(0, 7, 1))
+                elif duration == 600:
+                    ax.set_xlim(1, 4)
+                    ax.set_xticks(np.arange(1, 4.01, 0.5))
+                    ax.set_ylim(10, 50)
+                    ax.set_yticks(np.arange(10, 51, 10))
+                ax.grid(True, alpha=0.25)
+                ax.legend()
+                fig.tight_layout()
+                fig.savefig(figures_dir / f"rq3_{duration}s_{config_id}.png", dpi=160)
+                ax.clear()
+            # Combined RQ3 view: compare input lengths on shared axes.
+            duration_colors = {60: "tab:blue", 600: "tab:orange"}
+            for duration in sorted({int(round(float(row["audio_duration_sec"]))) for row in selected}):
                 group_rows = [
                     row for row in selected
-                    if row["engine"] == engine
-                    and int(row["chunk_sec"]) == chunk
-                    and int(round(float(row["audio_duration_sec"]))) == duration
+                    if int(round(float(row["audio_duration_sec"]))) == duration
                 ]
                 ax.scatter(
                     [float(row[x_key]) for row in group_rows],
                     [float(row["e2e_latency_sec"]) for row in group_rows],
                     alpha=0.65,
-                    marker=duration_markers.get(duration, "o"),
-                    label=f"{engine}, chunk={chunk}s, input={duration}s",
+                    color=duration_colors.get(duration),
+                    label=f"input={duration}s",
                 )
+            ax.set_title(f"{title} (input lengths combined, chunk=30s)")
+            ax.set_xlabel(x_label)
+            ax.set_ylabel("E2E latency (s)")
+            ax.set_xlim(0, 5)
+            ax.set_xticks(np.arange(0, 5.01, 0.5))
+            ax.set_ylim(0, 50)
+            ax.set_yticks(np.arange(0, 51, 5))
+            ax.grid(True, alpha=0.25)
+            ax.legend(loc="upper left", frameon=True, facecolor="white", framealpha=1, fontsize=11)
+            fig.tight_layout()
+            fig.savefig(figures_dir / f"rq3_combined_{config_id}.png", dpi=160)
+            plt.close(fig)
+            continue
         else:
             for engine in sorted({row["engine"] for row in selected}):
                 engine_rows = [row for row in selected if row["engine"] == engine]
