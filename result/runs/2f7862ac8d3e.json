@@ -1,0 +1,79 @@
+{
+  "config_id": "2f7862ac8d3e",
+  "created_at_utc": "2026-11-03T07:12:32.536578+00:00",
+  "data_dir": "/home/minjeong/whisper/data/tedlium",
+  "engine_selection": [
+    "faster-whisper"
+  ],
+  "model": "large-v3",
+  "precision": "float16 on CUDA; int8 for faster-whisper CPU / float32 for openai-whisper CPU",
+  "beam_size": 5,
+  "batch_size": 1,
+  "sample_rate_hz": 16000,
+  "environment": {
+    "python": "3.11.18",
+    "platform": "Linux-6.8.0-146-generic-x86_64-with-glibc2.39",
+    "torch": "2.11.0+cu128",
+    "torch_cuda_runtime": "12.8",
+    "gpu": {
+      "name": "NVIDIA GeForce RTX 5050",
+      "total_memory_bytes": 8080064512,
+      "compute_capability": "12.0"
+    },
+    "faster_whisper": "1.2.1",
+    "openai_whisper": "20250625",
+    "numpy": "1.26.4",
+    "scipy": "1.17.1",
+    "soundfile": "0.14.0",
+    "matplotlib": "3.11.2"
+  },
+  "seed": 42,
+  "requested_rq": "all",
+  "limit": null,
+  "talks": [
+    {
+      "talk_id": "AimeeMullins_2009P",
+      "duration_sec": 1318.2200625
+    },
+    {
+      "talk_id": "BillGates_2010",
+      "duration_sec": 1772.0308125
+    },
+    {
+      "talk_id": "DanBarber_2010",
+      "duration_sec": 1170.0303125
+    },
+    {
+      "talk_id": "DanielKahneman_2010",
+      "duration_sec": 1236.6948125
+    },
+    {
+      "talk_id": "EricMead_2009P",
+      "duration_sec": 545.7850625
+    },
+    {
+      "talk_id": "GaryFlake_2010",
+      "duration_sec": 413.384875
+    },
+    {
+      "talk_id": "JamesCameron_2010",
+      "duration_sec": 1055.764875
+    },
+    {
+      "talk_id": "JaneMcGonigal_2010",
+      "duration_sec": 1231.51675
+    },
+    {
+      "talk_id": "MichaelSpecter_2010",
+      "duration_sec": 1141.167875
+    },
+    {
+      "talk_id": "RobertGupta_2010U",
+      "duration_sec": 718.51825
+    },
+    {
+      "talk_id": "TomWujec_2010U",
+      "duration_sec": 442.4794375
+    }
+  ]
+}
