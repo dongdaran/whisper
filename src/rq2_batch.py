@@ -379,6 +379,19 @@ def _run(args: argparse.Namespace) -> int:
                         torch.cuda.synchronize()
                     start_time = time.perf_counter()
                     audio = load_window(clip)
+                    # Floating-point window durations can make sf.read request
+                    # one sample too few. Keep the fixed 600-second timestamp
+                    # grid consistent with the actual waveform passed to Whisper.
+                    expected_samples = INPUT_DURATION_SEC * TARGET_SAMPLE_RATE
+                    difference = expected_samples - len(audio)
+                    if abs(difference) > TARGET_SAMPLE_RATE // 1000:
+                        raise ValueError(
+                            f"Audio length differs from 600s by {difference} samples"
+                        )
+                    if difference > 0:
+                        audio = np.pad(audio, (0, difference))
+                    elif difference < 0:
+                        audio = audio[:expected_samples]
                     segments, _ = pipeline.transcribe(
                         audio,
                         language="en",
